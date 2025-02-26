@@ -1,0 +1,2 @@
+provide the list of all the procs,fxns and packages for the user 'sss'.
+Insert all the above objects in the table and export that able.

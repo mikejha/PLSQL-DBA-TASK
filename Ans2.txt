@@ -1,0 +1,101 @@
+--Optimized process:(Demarit: you have to create tab1 first as we are using nested table of tab1 first thats why.)
+-- Created on 26-02-2025 by USER 
+--CREATE THE TAB1 TABLE first (CREATE TABLE tab1 (SLNO int, PACKAGE_NAME Varchar2(100), PACKAGE_BODY_NAME VARCHAR2(100),PROC_NAME VARCHAR2(100), FUN_NAME VARCHAR2(100), CODE CLOB))
+-- then run below script--
+declare 
+  -- Local variables here
+  i integer;
+  v_pack_clob CLOB;
+  v_num int:=1;
+ --nested table
+  TYPE tab1_tab is TABLE OF tab1%rowtype; -- as table is not present in the past so we cannot use it, thats why we have to create table first.
+  tab1_nestab tab1_tab; -- :=tab1_tab();
+begin
+  --(Explicitly you have to create the table becaue we ae using NESTED TABLE OF tab1)
+  --execute immediate 'CREATE TABLE tab1 (SLNO int, PACKAGE_NAME Varchar2(100), PACKAGE_BODY_NAME VARCHAR2(100),PROC_NAME VARCHAR2(100), FUN_NAME VARCHAR2(100), CODE CLOB)';
+  tab1_nestab :=tab1_tab();
+  FOR I IN (SELECT distinct name,type FROM all_source where 
+    TYPE IN ('PACKAGE BODY','PACKAGE','FUNCTION','PROCEDURE') AND OWNER = 'SSS' and OWNER = 'SSS' --and name = 'TIC_DOCUMENTS'
+    order by TYPE
+     )
+    LOOP
+    IF i.type = 'PACKAGE' THEN 
+      --v_pack_clob:= SELECT DBMS_METADATA.GET_DDL('PACKAGE', NAME, 'SSS') FROM DUAL; 
+       SELECT DBMS_METADATA.GET_DDL('PACKAGE', i.NAME, 'SSS') INTO v_pack_clob FROM DUAL; 
+    ELSIF i.type = 'PACKAGE BODY' THEN 
+      --v_pack_clob:= SELECT DBMS_METADATA.GET_DDL('PACKAGE_BODY', NAME, 'SSS') FROM DUAL;
+      SELECT DBMS_METADATA.GET_DDL('PACKAGE_BODY', i.NAME, 'SSS') INTO v_pack_clob FROM DUAL;
+    ELSIF i.type = 'FUNCTION' THEN 
+      --v_pack_clob:= SELECT DBMS_METADATA.GET_DDL('PACKAGE', NAME, 'SSS') FROM DUAL; 
+       SELECT DBMS_METADATA.GET_DDL('FUNCTION', i.NAME, 'SSS') INTO v_pack_clob FROM DUAL; 
+    ELSIF i.type = 'PROCEDURE' THEN 
+      --v_pack_clob:= SELECT DBMS_METADATA.GET_DDL('PACKAGE', NAME, 'SSS') FROM DUAL; 
+       SELECT DBMS_METADATA.GET_DDL('PROCEDURE', i.NAME, 'SSS') INTO v_pack_clob FROM DUAL; 
+    END IF;
+    -- Initilaizing the value of nested table colums using v_num --
+    tab1_nestab.extend; --> very imp while using nested table, (not required in ASS ARRAY)
+    
+    tab1_nestab(v_num).slno:=v_num;
+
+    IF    i.type = 'PACKAGE' THEN
+       tab1_nestab(v_num).package_name:=i.NAME;
+    ELSIF i.type = 'PACKAGE BODY' THEN
+       tab1_nestab(v_num).package_body_name:=i.NAME;
+    ELSIF i.type = 'PROCEDURE' THEN
+       tab1_nestab(v_num).proc_name:=i.NAME;
+    ELSIF i.type = 'FUNCTION' THEN
+       tab1_nestab(v_num).fun_name:=i.NAME;
+    END IF;
+    
+    tab1_nestab(v_num).code:=v_pack_clob;  
+    --BELOW INSERTION IS ONE BY ONE, NOT IN IN A BULK.--
+    /*
+    IF v_pack_clob is not null then
+      BEGIN
+        INSERT INTO tab1(slno,package_name,package_body_name,proc_name, fun_name, code) 
+        VALUES
+         (v_num, 
+          CASE WHEN i.type = 'PACKAGE' THEN i.NAME ELSE 'NA' END,
+          CASE WHEN i.type = 'PACKAGE BODY' THEN i.NAME ELSE 'NA' END, 
+          CASE WHEN i.type = 'PROCEDURE' THEN i.NAME ELSE 'NA' END,
+          CASE WHEN i.type = 'FUNCTION' THEN i.NAME ELSE 'NA' END,
+          v_pack_clob  );
+         COMMIT;
+       EXCEPTION WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('ERROR IN PACKAGE '||' '|| i.name);
+       ROLLBACK;
+       END;
+       v_num :=v_num+1;
+     END IF; 
+     */
+     v_num :=v_num+1;
+     END LOOP;
+     --NOW INSERTION USING BULK BINDING AT A SINGLE RUN(NO HOPPING B/W PLSQL and SQL Executor)--
+        
+        FORALL i IN tab1_nestab.FIRST .. tab1_nestab.LAST SAVE EXCEPTIONs 
+        INSERT INTO tab1(slno,package_name,package_body_name,proc_name, fun_name, code) 
+        VALUES
+         (tab1_nestab(i).slno,
+          tab1_nestab(i).package_name,
+          tab1_nestab(i).package_body_name,
+          tab1_nestab(i).proc_name,
+          tab1_nestab(i).fun_name,
+          tab1_nestab(i).code );
+         COMMIT;
+         EXCEPTION WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('ERROR IN OBJECT '||' '|| tab1_nestab(i).code);
+         ROLLBACK;
+
+end; 
+--------
+/*
+SELECT *--,TEXT 
+FROM ALL_SOURCE  --SELECT COUNT(*), TYPE FROM ALL_SOURCE GROUP BY TYPE,OWNER HAVING OWNER = 'SSS' 
+WHERE --NAME = 'YOUR_PACKAGE_NAME' 
+--AND
+ TYPE IN ('PACKAGE BODY','PACKAGE') AND OWNER = 'SSS'
+ORDER BY LINE; 
+
+SELECT DBMS_METADATA.GET_DDL('PACKAGE', 'TIC_DOCUMENTS', 'SSS') FROM DUAL;   
+SELECT DBMS_METADATA.GET_DDL('PACKAGE_BODY', 'TIC_DOCUMENTS', 'SSS') FROM DUAL;  
+
+CREATE TABLE tab1 (SLNO int, PACKAGE_NAME Varchar2(100), PACKAGE_BODY_NAME VARCHAR2(100), CODE CLOB);
+*/
