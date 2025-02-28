@@ -1,0 +1,84 @@
+--below script is inserting the data from tab1 table to tab1_var table, 
+--(the difference is that code column is changed from CLOB to VARCHAR for exporting of table into CSV)
+-- before running the script, create below table:
+/*
+create table TAB1_VAR
+(
+  slno              INTEGER,
+  package_name      VARCHAR2(100),
+  package_body_name VARCHAR2(100),
+  proc_name         VARCHAR2(100),
+  fun_name          VARCHAR2(100),
+  code_sl_no        int,
+  code              VARCHAR2(4000)
+) 
+*/
+declare 
+  -- Local variables here
+  i integer;
+  type tab1_var_tab_type is table of tab1_var %rowtype;
+  tab1_var_tab tab1_var_tab_type:= tab1_var_tab_type();
+  upd_code_len int:=0; 
+  j int:=1;
+  v_code_sl_no int:=1;
+  --select substr('qwnefjnqwj',0,3) from dual; 
+begin
+  -- Test statements here
+  for i in (select slno, package_name, package_body_name, proc_name, fun_name,
+    code, DBMS_LOB.GETLENGTH(code) as code_len from tab1
+    --where DBMS_LOB.GETLENGTH(code) = 246924 
+    ) 
+    loop
+        if i.code_len > 4000 then 
+          ----
+              while i.code_len >= upd_code_len loop
+                tab1_var_tab.extend;
+                tab1_var_tab(j).slno:= i.slno;
+                tab1_var_tab(j).package_name:= i.package_name;
+                tab1_var_tab(j).package_body_name:= i.package_body_name;
+                tab1_var_tab(j).proc_name:= i.proc_name;
+                tab1_var_tab(j).fun_name:= i.fun_name;
+                --tab1_var_tab(j).code:= i.code;
+                tab1_var_tab(j).code_sl_no:= v_code_sl_no;
+                tab1_var_tab(j).code:= substr (i.code,upd_code_len,4000);
+                tab1_var_tab(j).proc_name:= i.proc_name;
+               upd_code_len := upd_code_len +4000;
+               j := j+1;
+               v_code_sl_no := v_code_sl_no +1;
+                --
+              end loop;
+              v_code_sl_no:= 1; --reinitializing it;
+              upd_code_len:= 0;
+              
+         else
+               tab1_var_tab.extend;
+               v_code_sl_no:= 1;
+               
+                tab1_var_tab(j).slno:= i.slno;
+                tab1_var_tab(j).package_name:= i.package_name;
+                tab1_var_tab(j).package_body_name:= i.package_body_name;
+                tab1_var_tab(j).proc_name:= i.proc_name;
+                tab1_var_tab(j).fun_name:= i.fun_name;
+                tab1_var_tab(j).code_sl_no:= v_code_sl_no;
+                tab1_var_tab(j).code:= i.code;
+                tab1_var_tab(j).code:= substr (i.code,upd_code_len,4000);
+                tab1_var_tab(j).proc_name:= i.proc_name;
+               ---
+               j := j+1;
+         end if;
+    end loop;
+    forall i in tab1_var_tab.first .. tab1_var_tab.last save exceptions
+            INSERT INTO tab1_var(slno,package_name,package_body_name,proc_name, fun_name,code_sl_no, code) 
+        VALUES
+         (tab1_var_tab(i).slno,
+          tab1_var_tab(i).package_name,
+          tab1_var_tab(i).package_body_name,
+          tab1_var_tab(i).proc_name,
+          tab1_var_tab(i).fun_name,
+          tab1_var_tab(i).code_sl_no,
+          tab1_var_tab(i).code );
+         COMMIT;
+         EXCEPTION WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('ERROR IN OBJECT '||' '|| tab1_var_tab(j).code);
+         ROLLBACK;
+  
+end;
